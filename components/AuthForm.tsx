@@ -1,9 +1,5 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-
 import OtpModal from '@/components/OTPModal';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,10 +11,13 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { createAccount } from '@/lib/actions/user.actions';
+import { createAccount, signInUser } from '@/lib/actions/user.actions';
+import { zodResolver } from '@hookform/resolvers/zod';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 type FormType = 'sign-in' | 'sign-up';
 
@@ -51,10 +50,13 @@ const AuthForm = ({ type }: { type: FormType }) => {
     setErrorMessage('');
 
     try {
-      const user = await createAccount({
-        fullName: values.fullName || '',
-        email: values.email,
-      });
+      const user =
+        type === 'sign-up'
+          ? await createAccount({
+              fullName: values.fullName || '',
+              email: values.email,
+            })
+          : await signInUser({ email: values.email });
 
       setAccountId(user.accountId);
     } catch {
@@ -71,7 +73,6 @@ const AuthForm = ({ type }: { type: FormType }) => {
           <h1 className="form-title">
             {type === 'sign-in' ? 'Sign In' : 'Sign Up'}
           </h1>
-
           {type === 'sign-up' && (
             <FormField
               control={form.control}
