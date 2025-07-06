@@ -57,6 +57,7 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
       rename: () =>
         renameFile({ fileId: file.$id, name, extension: file.extension, path }),
       share: () => updateFileUsers({ fileId: file.$id, emails, path }),
+      remove: () => handleRemoveUser(currentUser?.email),
     };
 
     success = await actions[action.value as keyof typeof actions]();
@@ -68,7 +69,7 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
     setIsLoading(false);
   };
 
-  const handleRemoveUser = async (emailToRemove: string) => {
+  const handleRemoveUser = async (emailToRemove: string | undefined) => {
     const fileUsers = file.users || [];
     const ownerEmail = file.owner?.email;
 

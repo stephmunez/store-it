@@ -159,28 +159,44 @@ export const updateFileUsers = async ({
     );
 
     const existingFileUsers: string[] = fileDoc.users || [];
+    const ownerEmail = fileDoc.owner?.email;
 
-    if (fileDoc.owner.email !== currentUser.email) {
-      throw new Error('Forbidden: You are not the owner of this file');
-    }
+    const filteredEmails = emails.filter((email) => email !== ownerEmail);
 
-    const filteredEmails = emails.filter(
-      (email) => email !== fileDoc.owner?.email
-    );
-
-    let updatedUsers: string[];
+    let updatedFileUsers: string[];
 
     if (mode === 'overwrite') {
-      updatedUsers = filteredEmails;
+      updatedFileUsers = filteredEmails;
     } else {
-      updatedUsers = Array.from(
+      updatedFileUsers = Array.from(
         new Set([...existingFileUsers, ...filteredEmails])
       );
     }
 
+    const isOwner = currentUser.email === ownerEmail;
+    const isExistingUser = existingFileUsers.includes(currentUser.email);
+
+    if (!isOwner) {
+      if (!isExistingUser) {
+        throw new Error('Forbidden: You are not allowed to modify this file');
+      }
+
+      const usersBeingRemoved = existingFileUsers.filter(
+        (email) => !updatedFileUsers.includes(email)
+      );
+
+      const isOnlyRemovingSelf =
+        usersBeingRemoved.length === 1 &&
+        usersBeingRemoved[0] === currentUser.email;
+
+      if (!isOnlyRemovingSelf) {
+        throw new Error('Forbidden: You can only remove yourself');
+      }
+    }
+
     const hasChanges =
-      updatedUsers.length !== existingFileUsers.length ||
-      updatedUsers.some((email) => !existingFileUsers.includes(email));
+      updatedFileUsers.length !== existingFileUsers.length ||
+      updatedFileUsers.some((email) => !existingFileUsers.includes(email));
 
     if (!hasChanges) {
       return parseStringify(fileDoc);
@@ -191,7 +207,7 @@ export const updateFileUsers = async ({
       appwriteConfig.filesCollectionId,
       fileId,
       {
-        users: updatedUsers,
+        users: updatedFileUsers,
       }
     );
 
