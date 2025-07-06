@@ -1,6 +1,6 @@
 'use client';
 
-import { FileDetails } from '@/components/ActionsModalContent';
+import { FileDetails, ShareInput } from '@/components/ActionsModalContent';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,7 +19,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { actionsDropdownItems } from '@/constants';
-import { renameFile } from '@/lib/actions/file.actions';
+import { useUser } from '@/context/UserContext';
+import { renameFile, updateFileUsers } from '@/lib/actions/file.actions';
 import { constructDownloadUrl } from '@/lib/utils';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -32,9 +33,11 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [action, setAction] = useState<ActionType | null>(null);
   const [name, setName] = useState(file.name);
+  const [emails, setEmails] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const path = usePathname();
+  const currentUser = useUser();
 
   const closeAllModals = () => {
     setIsModalOpen(false);
@@ -44,13 +47,16 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
   };
 
   const handleAction = async () => {
-    if (!action) return;
+    if (!action) {
+      return;
+    }
     let success = false;
     setIsLoading(true);
 
     const actions = {
       rename: () =>
         renameFile({ fileId: file.$id, name, extension: file.extension, path }),
+      share: () => updateFileUsers({ fileId: file.$id, emails, path }),
     };
 
     success = await actions[action.value as keyof typeof actions]();
@@ -62,8 +68,31 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
     setIsLoading(false);
   };
 
+  const handleRemoveUser = async (emailToRemove: string) => {
+    const fileUsers = file.users || [];
+    const ownerEmail = file.owner?.email;
+
+    const updatedUsers = fileUsers.filter(
+      (userEmail: string) =>
+        userEmail !== emailToRemove && userEmail !== ownerEmail
+    );
+
+    const success = await updateFileUsers({
+      fileId: file.$id,
+      emails: updatedUsers,
+      path,
+      mode: 'overwrite',
+    });
+
+    if (success) {
+      setEmails(updatedUsers);
+    }
+  };
+
   const renderDialogContent = () => {
-    if (!action) return null;
+    if (!action) {
+      return null;
+    }
 
     const { value, label } = action;
 
@@ -83,8 +112,19 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
           )}
 
           {value === 'details' && <FileDetails file={file} />}
+
+          {value === 'share' && (
+            <ShareInput
+              file={file}
+              onInputChange={setEmails}
+              onRemove={handleRemoveUser}
+            />
+          )}
         </DialogHeader>
-        {['rename', 'delete', 'share'].includes(value) && (
+
+        {(['rename', 'delete', 'share'].includes(value) &&
+          file.owner.email === currentUser?.email) ||
+        (value === 'remove' && file.owner.email !== currentUser?.email) ? (
           <DialogFooter className="flex flex-col gap-3 md:flex-row">
             <Button onClick={closeAllModals} className="modal-cancel-button">
               Cancel
@@ -102,7 +142,7 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
               )}
             </Button>
           </DialogFooter>
-        )}
+        ) : null}
       </DialogContent>
     );
   };
@@ -123,52 +163,66 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
             {file.name}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {actionsDropdownItems.map((actionItem) => (
-            <DropdownMenuItem
-              key={actionItem.value}
-              className="shad-dropdown-item"
-              onClick={() => {
-                setAction(actionItem);
+          {actionsDropdownItems
+            .filter((actionItem) => {
+              const isOwner = file.owner?.email === currentUser?.email;
 
-                if (
-                  ['rename', 'share', 'delete', 'details'].includes(
-                    actionItem.value
-                  )
-                ) {
-                  setIsDropdownOpen(false);
-                  setTimeout(() => {
-                    setIsModalOpen(true);
-                  }, 10);
-                }
-              }}
-            >
-              {actionItem.value === 'download' ? (
-                <Link
-                  href={constructDownloadUrl(file.bucketFileId)}
-                  download={file.name}
-                  className="flex items-center gap-2"
-                >
-                  <Image
-                    src={actionItem.icon}
-                    alt={actionItem.label}
-                    width={30}
-                    height={30}
-                  />
-                  {actionItem.label}
-                </Link>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Image
-                    src={actionItem.icon}
-                    alt={actionItem.label}
-                    width={30}
-                    height={30}
-                  />
-                  {actionItem.label}
-                </div>
-              )}
-            </DropdownMenuItem>
-          ))}
+              if (['rename', 'delete', 'share'].includes(actionItem.value)) {
+                return isOwner;
+              }
+
+              if (actionItem.value === 'remove' && isOwner) {
+                return false;
+              }
+
+              return true;
+            })
+            .map((actionItem) => (
+              <DropdownMenuItem
+                key={actionItem.value}
+                className="shad-dropdown-item"
+                onClick={() => {
+                  setAction(actionItem);
+
+                  if (
+                    ['rename', 'share', 'delete', 'details', 'remove'].includes(
+                      actionItem.value
+                    )
+                  ) {
+                    setIsDropdownOpen(false);
+                    setTimeout(() => {
+                      setIsModalOpen(true);
+                    }, 10);
+                  }
+                }}
+              >
+                {actionItem.value === 'download' ? (
+                  <Link
+                    href={constructDownloadUrl(file.bucketFileId)}
+                    download={file.name}
+                    className="flex items-center gap-2"
+                  >
+                    <Image
+                      src={actionItem.icon}
+                      alt={actionItem.label}
+                      width={30}
+                      height={30}
+                    />
+                    {actionItem.label}
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Image
+                      src={actionItem.icon}
+                      alt={actionItem.label}
+                      width={30}
+                      height={30}
+                    />
+                    {actionItem.label}
+                  </div>
+                )}
+              </DropdownMenuItem>
+            ))}
         </DropdownMenuContent>
       </DropdownMenu>
 

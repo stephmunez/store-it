@@ -21,6 +21,10 @@ export const uploadFile = async ({
   const { storage, databases } = await createAdminClient();
 
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) throw new Error('User not found');
+
     const inputFile = InputFile.fromBuffer(file, file.name);
 
     const bucketFile = await storage.createFile(
@@ -103,6 +107,20 @@ export const renameFile = async ({
   const { databases } = await createAdminClient();
 
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) throw new Error('User not found');
+
+    const fileDoc = await databases.getDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId
+    );
+
+    if (fileDoc.owner.email !== currentUser.email) {
+      throw new Error('Forbidden: You are not the owner of this file');
+    }
+
     const newName = name.endsWith(extension) ? name : `${name}.${extension}`;
 
     const updatedFile = await databases.updateDocument(
@@ -118,5 +136,68 @@ export const renameFile = async ({
     return parseStringify(updatedFile);
   } catch (error) {
     handleError(error, 'Failed to rename file');
+  }
+};
+
+export const updateFileUsers = async ({
+  fileId,
+  emails,
+  path,
+  mode = 'append',
+}: UpdateFileUsersProps) => {
+  const { databases } = await createAdminClient();
+
+  try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) throw new Error('User not found');
+
+    const fileDoc = await databases.getDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId
+    );
+
+    const existingFileUsers: string[] = fileDoc.users || [];
+
+    if (fileDoc.owner.email !== currentUser.email) {
+      throw new Error('Forbidden: You are not the owner of this file');
+    }
+
+    const filteredEmails = emails.filter(
+      (email) => email !== fileDoc.owner?.email
+    );
+
+    let updatedUsers: string[];
+
+    if (mode === 'overwrite') {
+      updatedUsers = filteredEmails;
+    } else {
+      updatedUsers = Array.from(
+        new Set([...existingFileUsers, ...filteredEmails])
+      );
+    }
+
+    const hasChanges =
+      updatedUsers.length !== existingFileUsers.length ||
+      updatedUsers.some((email) => !existingFileUsers.includes(email));
+
+    if (!hasChanges) {
+      return parseStringify(fileDoc);
+    }
+
+    const updatedFile = await databases.updateDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId,
+      {
+        users: updatedUsers,
+      }
+    );
+
+    await revalidatePath(path);
+    return parseStringify(updatedFile);
+  } catch (error) {
+    handleError(error, 'Failed to update file users');
   }
 };
