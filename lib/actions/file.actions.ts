@@ -21,6 +21,10 @@ export const uploadFile = async ({
   const { storage, databases } = await createAdminClient();
 
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) throw new Error('User not found');
+
     const inputFile = InputFile.fromBuffer(file, file.name);
 
     const bucketFile = await storage.createFile(
@@ -91,5 +95,167 @@ export const getFiles = async () => {
     return parseStringify(files);
   } catch (error) {
     handleError(error, 'Failed to get files');
+  }
+};
+
+export const renameFile = async ({
+  fileId,
+  name,
+  extension,
+  path,
+}: RenameFileProps) => {
+  const { databases } = await createAdminClient();
+
+  try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) throw new Error('User not found');
+
+    const fileDoc = await databases.getDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId
+    );
+
+    const ownerEmail = fileDoc.owner?.email;
+
+    if (currentUser.email !== ownerEmail) {
+      throw new Error('Forbidden: Only the owner can delete this file');
+    }
+
+    const newName = name.endsWith(extension) ? name : `${name}.${extension}`;
+
+    const updatedFile = await databases.updateDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId,
+      {
+        name: newName,
+      }
+    );
+
+    revalidatePath(path);
+    return parseStringify(updatedFile);
+  } catch (error) {
+    handleError(error, 'Failed to rename file');
+  }
+};
+
+export const updateFileUsers = async ({
+  fileId,
+  emails,
+  path,
+  mode = 'append',
+}: UpdateFileUsersProps) => {
+  const { databases } = await createAdminClient();
+
+  try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) throw new Error('User not found');
+
+    const fileDoc = await databases.getDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId
+    );
+
+    const existingFileUsers: string[] = fileDoc.users || [];
+    const ownerEmail = fileDoc.owner?.email;
+
+    const filteredEmails = emails.filter((email) => email !== ownerEmail);
+
+    let updatedFileUsers: string[];
+
+    if (mode === 'overwrite') {
+      updatedFileUsers = filteredEmails;
+    } else {
+      updatedFileUsers = Array.from(
+        new Set([...existingFileUsers, ...filteredEmails])
+      );
+    }
+
+    const isOwner = currentUser.email === ownerEmail;
+    const isExistingUser = existingFileUsers.includes(currentUser.email);
+
+    if (!isOwner) {
+      if (!isExistingUser) {
+        throw new Error('Forbidden: You are not allowed to modify this file');
+      }
+
+      const usersBeingRemoved = existingFileUsers.filter(
+        (email) => !updatedFileUsers.includes(email)
+      );
+
+      const isOnlyRemovingSelf =
+        usersBeingRemoved.length === 1 &&
+        usersBeingRemoved[0] === currentUser.email;
+
+      if (!isOnlyRemovingSelf) {
+        throw new Error('Forbidden: You can only remove yourself');
+      }
+    }
+
+    const hasChanges =
+      updatedFileUsers.length !== existingFileUsers.length ||
+      updatedFileUsers.some((email) => !existingFileUsers.includes(email));
+
+    if (!hasChanges) {
+      return parseStringify(fileDoc);
+    }
+
+    const updatedFile = await databases.updateDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId,
+      {
+        users: updatedFileUsers,
+      }
+    );
+
+    await revalidatePath(path);
+    return parseStringify(updatedFile);
+  } catch (error) {
+    handleError(error, 'Failed to update file users');
+  }
+};
+
+export const deleteFile = async ({
+  fileId,
+  bucketFileId,
+  path,
+}: DeleteFileProps) => {
+  const { databases, storage } = await createAdminClient();
+
+  try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) throw new Error('User not found');
+
+    const fileDoc = await databases.getDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId
+    );
+
+    const ownerEmail = fileDoc.owner?.email;
+
+    if (currentUser.email !== ownerEmail) {
+      throw new Error('Forbidden: Only the owner can delete this file');
+    }
+
+    const deletedFile = await databases.deleteDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId
+    );
+
+    if (deletedFile) {
+      await storage.deleteFile(appwriteConfig.bucketId, bucketFileId);
+    }
+
+    revalidatePath(path);
+    return parseStringify({ status: 'success' });
+  } catch (error) {
+    handleError(error, 'Failed to delete file');
   }
 };
