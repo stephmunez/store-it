@@ -117,8 +117,10 @@ export const renameFile = async ({
       fileId
     );
 
-    if (fileDoc.owner.email !== currentUser.email) {
-      throw new Error('Forbidden: You are not the owner of this file');
+    const ownerEmail = fileDoc.owner?.email;
+
+    if (currentUser.email !== ownerEmail) {
+      throw new Error('Forbidden: Only the owner can delete this file');
     }
 
     const newName = name.endsWith(extension) ? name : `${name}.${extension}`;
@@ -215,5 +217,45 @@ export const updateFileUsers = async ({
     return parseStringify(updatedFile);
   } catch (error) {
     handleError(error, 'Failed to update file users');
+  }
+};
+
+export const deleteFile = async ({
+  fileId,
+  bucketFileId,
+  path,
+}: DeleteFileProps) => {
+  const { databases, storage } = await createAdminClient();
+
+  try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) throw new Error('User not found');
+
+    const fileDoc = await databases.getDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId
+    );
+
+    const ownerEmail = fileDoc.owner?.email;
+
+    if (currentUser.email !== ownerEmail) {
+      throw new Error('Forbidden: Only the owner can delete this file');
+    }
+
+    const deletedFile = await databases.deleteDocument(
+      appwriteConfig.databaseId,
+      appwriteConfig.filesCollectionId,
+      fileId
+    );
+
+    if (deletedFile) {
+      await storage.deleteFile(appwriteConfig.bucketId, bucketFileId);
+    }
+
+    revalidatePath(path);
+    return parseStringify({ status: 'success' });
+  } catch (error) {
+    handleError(error, 'Failed to delete file');
   }
 };

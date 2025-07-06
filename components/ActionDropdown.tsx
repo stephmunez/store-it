@@ -20,7 +20,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { actionsDropdownItems } from '@/constants';
 import { useUser } from '@/context/UserContext';
-import { renameFile, updateFileUsers } from '@/lib/actions/file.actions';
+import {
+  deleteFile,
+  renameFile,
+  updateFileUsers,
+} from '@/lib/actions/file.actions';
 import { constructDownloadUrl } from '@/lib/utils';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -58,6 +62,8 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
         renameFile({ fileId: file.$id, name, extension: file.extension, path }),
       share: () => updateFileUsers({ fileId: file.$id, emails, path }),
       remove: () => handleRemoveUser(currentUser?.email),
+      delete: () =>
+        deleteFile({ fileId: file.$id, bucketFileId: file.bucketFileId, path }),
     };
 
     success = await actions[action.value as keyof typeof actions]();
@@ -120,6 +126,20 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
               onInputChange={setEmails}
               onRemove={handleRemoveUser}
             />
+          )}
+
+          {value === 'remove' && (
+            <p className="delete-confirmation">
+              Are you sure you want to remove yourself from{` `}
+              <span className="delete-file-name">{file.name}</span>?
+            </p>
+          )}
+
+          {value === 'delete' && (
+            <p className="delete-confirmation">
+              Are you sure you want to delete{` `}
+              <span className="delete-file-name">{file.name}</span>?
+            </p>
           )}
         </DialogHeader>
 
