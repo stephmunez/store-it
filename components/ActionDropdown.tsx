@@ -1,5 +1,6 @@
 'use client';
 
+import { FileDetails } from '@/components/ActionsModalContent';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -72,6 +73,7 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
           <DialogTitle className="text-center text-light-100">
             {label}
           </DialogTitle>
+
           {value === 'rename' && (
             <Input
               type="text"
@@ -79,6 +81,8 @@ const ActionDropdown = ({ file }: { file: Models.Document }) => {
               onChange={(e) => setName(e.target.value)}
             />
           )}
+
+          {value === 'details' && <FileDetails file={file} />}
         </DialogHeader>
         {['rename', 'delete', 'share'].includes(value) && (
           <DialogFooter className="flex flex-col gap-3 md:flex-row">
