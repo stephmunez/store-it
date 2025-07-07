@@ -2,7 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Models } from 'node-appwrite';
 
-import ActionDropdown from '@/components/ActionDropdown';
+import ActionsDropdown from '@/components/ActionsDropdown';
 import { Chart } from '@/components/Chart';
 import { FormattedDateTime } from '@/components/FormattedDateTime';
 import Thumbnail from '@/components/Thumbnail';
@@ -83,7 +83,7 @@ const Dashboard = async () => {
                       className="caption"
                     />
                   </div>
-                  <ActionDropdown file={file} />
+                  <ActionsDropdown file={file} />
                 </div>
               </Link>
             ))}
