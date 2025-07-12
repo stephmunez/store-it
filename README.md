@@ -15,9 +15,6 @@
   </div>
 
   <h3 align="center">Storage and File Sharing Platform</h3>
-  <div align="center">
-    I built this project with the help of <a href="https://www.youtube.com/@javascriptmastery/videos" target="_blank"><b>JavaScript Mastery</b></a>.
-  </div>
 </div>
 
 ## 📋 <a name="table">Table of Contents</a>
